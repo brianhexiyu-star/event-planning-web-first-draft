@@ -1,0 +1,7 @@
+{
+  "name": "Voyageur",
+  "description": "A sophisticated travel planning service that maps out your journey from start to finish, including transit hubs and final destinations.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

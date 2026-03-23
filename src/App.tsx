@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { useState, useEffect, useCallback } from 'react';
-import { MapPin, Plane, Train, Navigation, Trash2, Map as MapIcon, ChevronRight, Loader2, Maximize2, ArrowLeft } from 'lucide-react';
+import { MapPin, Plane, Train, Navigation, Trash2, Map as MapIcon, ChevronRight, Loader2, Maximize2, ArrowLeft, Clock, Gauge } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, Tooltip } from 'react-leaflet';
 import { BrowserRouter as Router, Routes, Route, useNavigate, Link } from 'react-router-dom';
@@ -48,6 +48,7 @@ export default function App() {
   ]);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
+  const [tripStats, setTripStats] = useState<{ distance: number; duration: number } | null>(null);
 
   const geocode = async (query: string): Promise<[number, number] | undefined> => {
     if (!query.trim()) return undefined;
@@ -69,12 +70,11 @@ export default function App() {
     setIsGeocoding(true);
     const updatedWaypoints: Waypoint[] = [];
     
-    // Process sequentially with a small delay to respect Nominatim's 1 req/sec limit
+    // 1. Geocode all waypoints
     for (const w of currentWaypoints) {
       if (w.value && !w.coords) {
         const coords = await geocode(w.value);
         updatedWaypoints.push({ ...w, coords });
-        // Wait 1 second before next request if not the last one
         await new Promise(resolve => setTimeout(resolve, 1000));
       } else {
         updatedWaypoints.push(w);
@@ -82,11 +82,43 @@ export default function App() {
     }
     
     setWaypoints(updatedWaypoints);
-    const validCoords = updatedWaypoints
-      .map(w => w.coords)
-      .filter((c): c is [number, number] => c !== undefined);
+    const validWaypoints = updatedWaypoints.filter(w => w.coords);
     
-    setRouteCoords(validCoords);
+    if (validWaypoints.length > 1) {
+      try {
+        // 2. Fetch route from OSRM via our proxy
+        // Format: lon,lat;lon,lat;...
+        const coordsString = validWaypoints
+          .map(w => `${w.coords![1]},${w.coords![0]}`)
+          .join(';');
+        
+        const response = await fetch(`/api/route?coords=${coordsString}`);
+        if (!response.ok) throw new Error('Failed to fetch route');
+        
+        const data = await response.json();
+        if (data.routes && data.routes.length > 0) {
+          // OSRM returns [lon, lat], Leaflet needs [lat, lon]
+          const fullPath = data.routes[0].geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]);
+          setRouteCoords(fullPath);
+          setTripStats({
+            distance: data.routes[0].distance,
+            duration: data.routes[0].duration
+          });
+        } else {
+          // Fallback to straight lines if OSRM fails
+          setRouteCoords(validWaypoints.map(w => w.coords!));
+          setTripStats(null);
+        }
+      } catch (error) {
+        console.error('Routing error:', error);
+        setRouteCoords(validWaypoints.map(w => w.coords!));
+        setTripStats(null);
+      }
+    } else {
+      setRouteCoords(validWaypoints.map(w => w.coords!));
+      setTripStats(null);
+    }
+    
     setIsGeocoding(false);
   }, []);
 
@@ -110,6 +142,7 @@ export default function App() {
               setWaypoints={setWaypoints}
               isGeocoding={isGeocoding}
               routeCoords={routeCoords}
+              tripStats={tripStats}
               handleGenerate={handleGenerate}
             />
           } />
@@ -125,8 +158,22 @@ export default function App() {
   );
 }
 
-function Home({ waypoints, setWaypoints, isGeocoding, routeCoords, handleGenerate }: any) {
+function Home({ waypoints, setWaypoints, isGeocoding, routeCoords, tripStats, handleGenerate }: any) {
   const navigate = useNavigate();
+
+  const formatDuration = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  };
+
+  const calculateSpeed = (distance: number, duration: number) => {
+    // distance is in meters, duration in seconds
+    // km/h = (m / 1000) / (s / 3600)
+    const speed = (distance / 1000) / (duration / 3600);
+    return Math.round(speed);
+  };
 
   const addWaypoint = (type: Waypoint['type']) => {
     const newWaypoint: Waypoint = {
@@ -268,6 +315,33 @@ function Home({ waypoints, setWaypoints, isGeocoding, routeCoords, handleGenerat
                 </>
               )}
             </button>
+
+            {tripStats && !isGeocoding && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="grid grid-cols-2 gap-4 pt-4"
+              >
+                <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                    <Clock className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold">Total Time</p>
+                    <p className="text-lg font-light italic serif">{formatDuration(tripStats.duration)}</p>
+                  </div>
+                </div>
+                <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+                    <Gauge className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold">Avg Speed</p>
+                    <p className="text-lg font-light italic serif">{calculateSpeed(tripStats.distance, tripStats.duration)} km/h</p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
           </div>
         </div>
       </div>
@@ -312,6 +386,15 @@ function Home({ waypoints, setWaypoints, isGeocoding, routeCoords, handleGenerat
                   </Tooltip>
                 </Marker>
               ))}
+              {routeCoords.length > 1 && (
+                <Polyline 
+                  positions={routeCoords} 
+                  color="#10b981" 
+                  weight={3} 
+                  opacity={0.6} 
+                  dashArray="10, 10"
+                />
+              )}
               <MapUpdater coords={routeCoords} />
             </MapContainer>
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/80 via-transparent to-transparent" />
@@ -377,6 +460,15 @@ function FullRoute({ waypoints, routeCoords }: any) {
             </Popup>
           </Marker>
         ))}
+        {routeCoords.length > 1 && (
+          <Polyline 
+            positions={routeCoords} 
+            color="#10b981" 
+            weight={4} 
+            opacity={0.8} 
+            dashArray="10, 10"
+          />
+        )}
         <MapUpdater coords={routeCoords} />
       </MapContainer>
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_150px_rgba(0,0,0,0.7)] z-[999]" />

@@ -36,6 +36,30 @@ async function startServer() {
     }
   });
 
+  // API Proxy for OSRM Routing
+  app.get("/api/route", async (req, res) => {
+    const coords = req.query.coords;
+    if (!coords) {
+      return res.status(400).json({ error: "Missing 'coords' parameter" });
+    }
+
+    try {
+      // OSRM expects: lon,lat;lon,lat;...
+      const url = `http://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`OSRM API responded with status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Routing proxy error:", error);
+      res.status(500).json({ error: "Failed to fetch routing data" });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

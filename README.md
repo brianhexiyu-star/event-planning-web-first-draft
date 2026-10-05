@@ -1,20 +1,91 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Voyageur Travel Planner
 
-# Run and deploy your AI Studio app
+An AI-assisted travel planning web application built with React, TypeScript, Vite, Express, Gemini, Leaflet, and OpenStreetMap-based services.
 
-This contains everything you need to run your app locally.
+The project combines natural-language trip planning with interactive maps. A user can describe a trip, generate structured waypoints with Gemini, geocode locations, calculate routes, and visualize the journey.
 
-View your app in AI Studio: https://ai.studio/apps/c83b0753-bf40-4a0a-8d7c-d0e3c3267900
+## Features
 
-## Run Locally
+- Natural-language AI travel planning
+- Gemini-generated itineraries
+- Multi-day waypoint planning
+- Browser geolocation support
+- Forward and reverse geocoding
+- Interactive Leaflet map
+- Route visualization
+- Distance and duration calculations
+- Airport and flight segment handling
+- Hotel, restaurant, station, and destination waypoint types
+- Animated React interface
+- Express proxy for map services
 
-**Prerequisites:**  Node.js
+## Tech Stack
 
+- React 19
+- TypeScript
+- Vite
+- Express
+- Google Gemini API
+- Leaflet and React Leaflet
+- OpenStreetMap / Nominatim
+- OSRM
+- React Router
+- Tailwind CSS
+- Motion
+- Lucide React
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## How It Works
+
+~~~text
+User request
+    ↓
+Gemini travel planner
+    ↓
+Structured waypoints
+    ↓
+Geocoding
+    ↓
+Route calculation
+    ↓
+Interactive map and trip statistics
+~~~
+
+Gemini is asked to return structured waypoint data containing the day, type, label, location, coordinates, and description.
+
+## Map Services
+
+The Express server provides:
+
+~~~text
+GET /api/geocode
+GET /api/reverse
+GET /api/route
+~~~
+
+These proxies keep external map requests behind the local server and handle Nominatim request requirements.
+
+## Running Locally
+
+~~~bash
+npm install
+npm run dev
+~~~
+
+Provide a Gemini API key through a local environment file or deployment secret.
+
+The development server runs on port 3000.
+
+Build and preview:
+
+~~~bash
+npm run build
+npm run preview
+~~~
+
+## Development Notes
+
+Airport-to-airport segments are handled differently from ordinary ground routes so flight legs can be represented visually without treating them as road journeys.
+
+## Status
+
+Prototype / first draft.
